@@ -517,6 +517,9 @@ class BinanceOrderManagementSystem(OrderManagementSystem):
                 res = await self._api_client.delete_papi_v1_um_all_open_orders(**params)
             elif market.inverse:
                 res = await self._api_client.delete_papi_v1_cm_all_open_orders(**params)
+        
+        if isinstance(res, list):
+            return  # spot and margin return a list of canceled orders
 
         if not (code := int(res.get("code", 0))) == 200:
             msg = res.get("msg", "Unknown error")

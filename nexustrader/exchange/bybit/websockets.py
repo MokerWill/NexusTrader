@@ -63,9 +63,9 @@ class BybitWSClient(WSClient):
         handler: Callable[..., Any],
         task_manager: TaskManager,
         clock: LiveClock,
-        api_key: str = None,
-        secret: str = None,
-        custom_url: str = None,
+        api_key: str | None = None,
+        secret: str | None = None,
+        custom_url: str | None = None,
     ):
         self._account_type = account_type
         self._api_key = api_key

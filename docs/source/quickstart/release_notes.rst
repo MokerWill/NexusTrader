@@ -1,6 +1,18 @@
 Release Notes
 =============
 
+0.3.37
+------
+
+**Fixed: Binance futures kline streams use routed market endpoints**
+
+``BinanceKlineDirectWSClient`` now normalizes USD-M and COIN-M futures kline
+WebSocket URLs to ``/market/stream?streams=``. Legacy custom roots such as
+``wss://fstream.binance.com`` and legacy combined stream URLs are upgraded
+automatically, while already-routed market stream URLs and spot stream URLs are
+preserved. This matches Binance's post-2026-04-23 futures market stream routing
+and prevents reconnect loops on the retired root endpoint.
+
 0.3.36
 ------
 

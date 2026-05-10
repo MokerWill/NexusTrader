@@ -490,8 +490,8 @@ class BinanceKlineDirectWSClient:
         self._handler = handler
         self._task_manager = task_manager
         url = custom_url or account_type.ws_url
-        if custom_url is None and account_type.is_future:
-            url = f"{url.rstrip('/')}/market"
+        if account_type.is_future:
+            url = self._make_market_stream_url(url)
         self._base_url = self._make_stream_base_url(url)
         self._batch_size = max(int(batch_size), 1)
         self._reconnect_delay_sec = max(float(reconnect_delay_sec), 1.0)
@@ -514,6 +514,19 @@ class BinanceKlineDirectWSClient:
         if url.endswith("/ws"):
             return url[:-3] + "/stream?streams="
         return url + "/stream?streams="
+
+    @staticmethod
+    def _make_market_stream_url(url: str) -> str:
+        base_url, separator, query = url.rstrip("/").partition("?")
+        if base_url.endswith("/market") or "/market/" in base_url:
+            return url
+        if base_url.endswith("/stream"):
+            base_url = base_url[: -len("/stream")]
+        elif base_url.endswith("/ws"):
+            base_url = base_url[: -len("/ws")]
+        if separator and query.startswith("streams="):
+            return f"{base_url}/market/stream{separator}{query}"
+        return f"{base_url}/market{separator}{query}"
 
     @staticmethod
     def _chunk_params(params: list[str], chunk_size: int) -> list[list[str]]:

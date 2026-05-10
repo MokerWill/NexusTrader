@@ -4,6 +4,16 @@ All notable changes to NexusTrader will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.37] - 2026-05-10
+
+### Fixed
+
+- **Binance USD-M/COIN-M kline streams use routed market endpoints** - `BinanceKlineDirectWSClient` now normalizes futures kline WebSocket URLs to `/market/stream?streams=`, including legacy custom roots such as `wss://fstream.binance.com` and legacy combined stream URLs. This matches Binance's post-2026-04-23 futures market stream routing and prevents repeated reconnects on the retired root endpoint.
+
+### Tests
+
+- Added regression coverage for Binance futures kline default URLs, legacy custom roots, legacy custom combined streams, already-routed custom streams, and spot stream URL preservation.
+
 ## [0.3.36] - 2026-05-07
 
 ### Fixed

@@ -7,8 +7,8 @@ This module implements WebSocket client for Binance exchange, providing real-tim
 
 Available WebSocket URLs:
  - Spot: ``wss://stream.binance.com:9443/ws``
- - USD-M Futures: ``wss://fstream.binance.com/ws``
- - COIN-M Futures: ``wss://dstream.binance.com/ws``
+ - USD-M Futures market streams: ``wss://fstream.binance.com/market/stream?streams=``
+ - COIN-M Futures market streams: ``wss://dstream.binance.com/market/stream?streams=``
 
 Class Overview
 -----------------

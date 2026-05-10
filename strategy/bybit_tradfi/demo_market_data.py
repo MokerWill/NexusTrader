@@ -56,7 +56,7 @@ except AttributeError as e:
         '  PASSPHRASE = "<MT5 broker server name>"\n'
     ) from e
 
-SYMBOL = "EURUSD.BYBIT_TRADFI"
+SYMBOL = "XAUUSD_s.BYBIT_TRADFI"
 
 
 class Mt5MarketDataDemo(Strategy):

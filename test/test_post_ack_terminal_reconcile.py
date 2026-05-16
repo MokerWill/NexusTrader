@@ -88,6 +88,14 @@ class DummyTaskManager:
         return task
 
 
+class DummyMsgBus:
+    def __init__(self):
+        self.messages = []
+
+    def send(self, endpoint: str, msg):
+        self.messages.append((endpoint, msg))
+
+
 def make_order(
     oid: str = "oid-1",
     status: OrderStatus = OrderStatus.PENDING,
@@ -137,6 +145,30 @@ def make_oms(cached_order, latest_orders):
 
     oms.fetch_order = fetch_order
     oms.order_status_update = order_status_update
+    return oms
+
+
+def make_base_oms(cached_order):
+    oms = DummyOms.__new__(DummyOms)
+    oms._cache = DummyCache(cached_order)
+    oms._registry = DummyRegistry()
+    oms._task_manager = DummyTaskManager()
+    oms._exchange_id = ExchangeType.BINANCE
+    oms._msgbus = DummyMsgBus()
+    oms._post_fill_position_resync_delay_sec = 0
+    oms._post_fill_position_resync_pending = False
+    oms._post_fill_position_resync_dirty = False
+    oms._position_resync_calls = 0
+    oms._log = SimpleNamespace(
+        debug=lambda *args, **kwargs: None,
+        info=lambda *args, **kwargs: None,
+        warning=lambda *args, **kwargs: None,
+    )
+
+    def init_position():
+        oms._position_resync_calls += 1
+
+    oms._init_position = init_position
     return oms
 
 
@@ -201,3 +233,48 @@ async def test_post_ack_terminal_reconcile_updates_ioc_limit_order():
     await oms._task_manager.tasks[0]
 
     assert oms.updated_orders == [latest]
+
+
+@pytest.mark.asyncio
+async def test_filled_order_status_update_resyncs_positions_after_grace():
+    order = make_order(status=OrderStatus.FILLED, filled=Decimal("0.01"))
+    order.remaining = Decimal("0")
+    oms = make_base_oms(order)
+
+    oms.order_status_update(order)
+    await oms._task_manager.tasks[0]
+
+    assert oms._position_resync_calls == 1
+    assert oms._post_fill_position_resync_pending is False
+    assert oms._post_fill_position_resync_dirty is False
+    assert oms._registry.registered is False
+    assert oms._msgbus.messages == [("filled", order)]
+
+
+@pytest.mark.asyncio
+async def test_zero_fill_terminal_order_does_not_resync_positions():
+    order = make_order(status=OrderStatus.CANCELED, filled=Decimal("0"))
+    order.remaining = order.amount
+    oms = make_base_oms(order)
+
+    oms.order_status_update(order)
+
+    assert oms._task_manager.tasks == []
+    assert oms._position_resync_calls == 0
+    assert oms._registry.registered is False
+
+
+@pytest.mark.asyncio
+async def test_pending_post_fill_resync_runs_again_when_marked_dirty():
+    order = make_order(status=OrderStatus.FILLED, filled=Decimal("0.01"))
+    order.remaining = Decimal("0")
+    oms = make_base_oms(order)
+
+    oms._schedule_post_fill_position_resync(order)
+    oms._schedule_post_fill_position_resync(order)
+    await oms._task_manager.tasks[0]
+
+    assert len(oms._task_manager.tasks) == 1
+    assert oms._position_resync_calls == 2
+    assert oms._post_fill_position_resync_pending is False
+    assert oms._post_fill_position_resync_dirty is False

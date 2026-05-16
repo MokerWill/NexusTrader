@@ -56,6 +56,9 @@ class OrderManagementSystem(ABC):
         self._post_ack_terminal_reconcile_delay_sec = 1.0
         self._post_ack_terminal_reconcile_max_attempts = 3
         self._post_ack_terminal_reconcile_oids: set[str] = set()
+        self._post_fill_position_resync_delay_sec = 1.0
+        self._post_fill_position_resync_pending = False
+        self._post_fill_position_resync_dirty = False
 
         self._ws_client.set_lifecycle_hooks(
             on_connected=self._on_private_ws_connected,
@@ -330,6 +333,82 @@ class OrderManagementSystem(ABC):
             if hasattr(self, "_post_ack_terminal_reconcile_oids"):
                 self._post_ack_terminal_reconcile_oids.discard(oid)
 
+    @staticmethod
+    def _order_decimal(value) -> Decimal:
+        if value is None:
+            return Decimal("0")
+        try:
+            return Decimal(str(value))
+        except Exception:
+            return Decimal("0")
+
+    def _order_has_position_impact(self, order: Order) -> bool:
+        if not order.is_closed:
+            return False
+        filled = self._order_decimal(order.filled)
+        if filled > Decimal("0"):
+            return True
+        if order.status == OrderStatus.FILLED:
+            amount = self._order_decimal(order.amount)
+            remaining = self._order_decimal(order.remaining)
+            return amount > Decimal("0") and remaining <= Decimal("0")
+        return False
+
+    def _schedule_post_fill_position_resync(self, order: Order):
+        if not self._order_has_position_impact(order):
+            return
+        if getattr(self, "_post_fill_position_resync_pending", False):
+            self._post_fill_position_resync_dirty = True
+            return
+
+        self._post_fill_position_resync_pending = True
+        self._post_fill_position_resync_dirty = False
+        coro = self._resync_positions_after_fill_grace(order.oid, order.symbol)
+        try:
+            task = self._task_manager.create_task(
+                coro,
+                name=f"{self._exchange_id.value}-post-fill-position-resync",
+            )
+            if not isinstance(task, asyncio.Task):
+                coro.close()
+                self._post_fill_position_resync_pending = False
+                self._post_fill_position_resync_dirty = False
+                self._log.warning(
+                    f"[{order.symbol}] post-fill position resync scheduling "
+                    "returned no asyncio task"
+                )
+        except Exception as e:
+            coro.close()
+            self._post_fill_position_resync_pending = False
+            self._post_fill_position_resync_dirty = False
+            self._log.warning(
+                f"[{order.symbol}] post-fill position resync scheduling failed: {e}"
+            )
+
+    async def _resync_positions_after_fill_grace(self, oid: str | None, symbol: str):
+        try:
+            while True:
+                delay = getattr(self, "_post_fill_position_resync_delay_sec", 1.0)
+                await asyncio.sleep(max(float(delay), 0.0))
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, self._init_position)
+                self._log.info(
+                    f"[{symbol}] post-fill position cache resynced via REST "
+                    f"(oid={oid})"
+                )
+
+                if not getattr(self, "_post_fill_position_resync_dirty", False):
+                    return
+                self._post_fill_position_resync_dirty = False
+        except Exception as e:
+            self._log.warning(
+                f"[{symbol}] post-fill position cache resync failed "
+                f"(oid={oid}): {e}"
+            )
+        finally:
+            self._post_fill_position_resync_pending = False
+            self._post_fill_position_resync_dirty = False
+
     def _schedule_cancel_success_reconcile(self, oid: str, symbol: str):
         self._task_manager.create_task(
             self._reconcile_cancel_success_after_grace(oid, symbol),
@@ -413,6 +492,7 @@ class OrderManagementSystem(ABC):
                 self._log.debug(f"ORDER STATUS EXPIRED: {str(order)}")
 
         if order.is_closed:
+            self._schedule_post_fill_position_resync(order)
             self._registry.unregister_order(order.oid)
             self._registry.unregister_tmp_order(order.oid)
 

@@ -4,6 +4,17 @@ All notable changes to NexusTrader will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.38] - 2026-05-16
+
+### Fixed
+
+- **Filled orders now heal missed position cache updates** - After a terminal order update with non-zero fill quantity, the base OMS schedules a short delayed REST position resync. This repairs position cache misses when the exchange order callback arrives but the private position stream update is delayed or dropped. Overlapping fill-triggered resyncs are coalesced, and a fill that arrives while a resync is pending marks the task to run one more pass afterward.
+
+### Tests
+
+- Added regression coverage for fill-triggered position resyncs, zero-fill terminal orders, and dirty resync coalescing.
+- Verified with `py -m pytest test\test_post_ack_terminal_reconcile.py test\exchange\test_cancel_success_reconcile_base.py test\test_ws_ack.py -q`.
+
 ## [0.3.37] - 2026-05-10
 
 ### Fixed

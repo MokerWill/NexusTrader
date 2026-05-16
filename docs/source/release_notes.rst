@@ -1,6 +1,18 @@
 Release Notes
 =============
 
+0.3.38
+------
+
+**Fixed: filled orders now heal missed position cache updates**
+
+After a terminal order update with non-zero fill quantity, the base OMS now
+schedules a short delayed REST position resync. This repairs position cache
+misses when the exchange order callback arrives but the private position
+stream update is delayed or dropped. Overlapping fill-triggered resyncs are
+coalesced, and a fill that arrives while a resync is pending marks the task to
+run one more pass afterward.
+
 0.3.36
 ------
 
